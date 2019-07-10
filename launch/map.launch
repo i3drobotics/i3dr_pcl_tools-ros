@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--XML-->
+    <launch>
+
+    <arg name="gui" default="False" />
+    <param name="use_gui" value="$(arg gui)"/>
+    <param name="use_sim_time" value="true"/>
+
+    <node name="load_pcl_list" pkg="pcl_tools" type="load_pcl_list" output="screen" >
+        <param name="pcl2_output" type="string" value="/loaded_pcl2" />
+        <param name="folderpath" type="string" value="$(find pcl_tools)/doc/examples/load_list/" />
+        <param name="filename" type="string" value="test" />
+        <param name="tf_extension" type="string" value="pose" />
+        <param name="pcl_extension" type="string" value="pcd" />
+        <param name="point_cloud_frame_id" type="string" value="/camera" />
+        <param name="world_frame_id" type="string" value="/world" />
+        <param name="rate" type="double" value="5" />
+        <param name="loop" type="bool" value="true" />
+    </node>
+
+    <node name="pcl_map" pkg="pcl_tools" type="pcl_map" output="screen" >
+        <param name="resolusion" type="double" value="0.01" />
+        <param name="pcl2_input" type="string" value="/loaded_pcl2" />
+        <param name="pcl2_output" type="string" value="/map_plc2" />
+        <param name="pcl_output" type="string" value="/map_pcl" />
+    </node>
+
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find pcl_tools)/rviz/map.rviz" />
+
+</launch>

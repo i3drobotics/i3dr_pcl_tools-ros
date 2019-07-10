@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<robot name="camera_world" xmlns:xacro="http://ros.org/wiki/xacro">
+  <link name="world"/>
+  <link name="camera"/>
+
+  <joint name="world_to_camera" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="camera"/>
+  </joint>
+</robot>

@@ -1,0 +1,26 @@
+<launch>
+    <param name="robot_description" command="$(find xacro)/xacro '$(find phobos)/urdf/vrep_simulated_phobos.urdf.xacro'" />
+
+    <arg name="gui" default="False" />
+    <arg name="use_tf_static" default="false"/>
+    <param name="use_gui" value="$(arg gui)"/>
+
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" >
+       <param name="publish_default_positions" type="bool" value="false"/>
+       <param name="rate" type="int" value="100"/>
+    </node>
+
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+        <param name="use_tf_static" value="$(arg use_tf_static)"/>
+        <param name="publish_frequency" type="double" value="100"/>
+    </node>
+
+    <node name="load_pcl" pkg="pcl_tools" type="load_pcl" output="screen" >
+        <param name="pcl2_output" type="string" value="/i3dr_point_cloud" />
+        <param name="point_cloud_frame_id" type="string" value="/phobos_cameraLeft_optical" />
+        <param name="pcl_filepath" type="string" value="/home/htp/Desktop/simple_part/glovebox_parts_simple_fix.ply" />
+    </node>
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find pcl_tools)/rviz/load_point_cloud_list.rviz" />
+
+    <!--<node pkg="rosbag" type="record" name="ros_record_all" args="/tf /i3dr_point_cloud -b 0 -o /home/htp/Desktop/simple_part/rosbags/i3dr_glovebox_part" output="screen"/>-->
+</launch>

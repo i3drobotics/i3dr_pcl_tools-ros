@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!--XML-->
+<launch>
+
+    <node name="pcl_map" pkg="i3dr_pcl_tools" type="pcl_map" output="screen" >
+        <param name="resolusion" type="double" value="0.01" />
+        <param name="pcl2_input" type="string" value="/loaded_pcl2" />
+        <param name="pcl2_output" type="string" value="/map_plc2" />
+        <param name="pcl_output" type="string" value="/map_pcl" />
+    </node>
+
+</launch>
