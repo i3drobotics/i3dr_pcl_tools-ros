@@ -102,7 +102,8 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "load_pcl");
   ros::NodeHandle nh;
   ros::NodeHandle p_nh("~");
-  ros::Rate loop_rate(100);
+
+  double rate = 1;
 
   std::string pcl2_output,pcl_filepath,tf_filepath;
   std::string point_cloud_frame_id,world_frame_id;
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
   p_nh.getParam("pcl_filepath",pcl_filepath);
   p_nh.getParam("pcl2_output",pcl2_output);
   p_nh.getParam("point_cloud_frame_id",point_cloud_frame_id);
+  p_nh.getParam("rate",rate);
   include_tf = false;
   p_nh.getParam("include_tf",include_tf);
 
@@ -117,6 +119,8 @@ int main(int argc, char **argv)
     p_nh.getParam("tf_filepath",tf_filepath);
     p_nh.getParam("world_frame_id",world_frame_id);
   }
+
+  ros::Rate loop_rate(rate);
 
   pub_output_pcl2 = nh.advertise<sensor_msgs::PointCloud2>(pcl2_output, 1);
 

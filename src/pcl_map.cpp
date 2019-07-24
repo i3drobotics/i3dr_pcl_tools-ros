@@ -27,11 +27,11 @@ double resolution;
 bool reset_map(i3dr_pcl_tools::reset_map::Request &req,
                    i3dr_pcl_tools::reset_map::Response &res)
 {
+  ROS_INFO("Reset Global Map");
   full_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
   full_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
   return true;
 }
-
 
 bool save_map(i3dr_pcl_tools::save_map::Request &req,
                   i3dr_pcl_tools::save_map::Response &res)
@@ -40,9 +40,9 @@ bool save_map(i3dr_pcl_tools::save_map::Request &req,
   ROS_INFO("saving point cloud to file: '%s'",req.filepath.c_str());
   pcl::io::savePLYFileBinary(req.filepath,*full_map_pcl_XYZRGB);
   res.res = "Point cloud saved to file: " + req.filepath;
+  ROS_INFO("%s",res.res.c_str());
   return true;
 }
-
 
 bool comparePoint_XYZ(pcl::PointXYZ p1, pcl::PointXYZ p2){
 if (p1.x != p2.x)
@@ -308,11 +308,55 @@ void add_pcl_to_map(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl){
   std::cerr << "Glued point cloud size: " << full_map_pcl_XYZRGB->points.size () << std::endl;
 }
 
-/*
-void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in){
-  double fit_score = 0.1;
-  if (full_map_pcl->size() > 0){
-    //std::cout << "Point cloud input size: " << cloud_in->points.size () << std::endl;
+void icp_convergence(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl){
+  double fit_score = 0.1 * 10;
+  if (full_map_pcl_XYZRGB->size() > 0){
+    std::cout << "Point cloud input size: " << input_pcl->points.size () << std::endl;
+
+    pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_pcl(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PCLPointCloud2::Ptr aligned_pcl2(new pcl::PCLPointCloud2 ());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr aligned_filtered_pcl(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PCLPointCloud2::Ptr aligned_filtered_pcl2(new pcl::PCLPointCloud2 ());
+
+    int attempts = 3;
+
+    for (int i = 0; i < attempts; i++){
+      fit_score = fit_score / 10;
+      std::cerr << "ICP Attempt: " << i+1 << "/" << attempts << " score maximum: " << fit_score <<  std::endl;
+      icp.setInputSource(input_pcl);
+      icp.setInputTarget(full_map_pcl_XYZRGB);
+      //icp.setMaxCorrespondenceDistance (resolution);
+      icp.align(*aligned_pcl);
+      std::cerr << "has converged:" << icp.hasConverged() << " score: " << icp.getFitnessScore();
+      std::cerr << icp.getFinalTransformation() << std::endl;
+      if (icp.hasConverged() && icp.getFitnessScore() < fit_score){
+        std::cerr << " ...adding to map" << std::endl;
+        pcl::toPCLPointCloud2(*aligned_pcl,*aligned_pcl2);
+        aligned_filtered_pcl2 = filter_to_grid_XYZRGB(aligned_pcl2,resolution);
+        pcl::fromPCLPointCloud2(*aligned_filtered_pcl2,*aligned_filtered_pcl);
+        full_map_pcl_XYZRGB->operator +=(*aligned_filtered_pcl);
+        remove_point_cloud_duplicates(full_map_pcl_XYZRGB);
+        break;
+      } else {
+        std::cerr << " ...fit score too high" << std::endl;
+      }
+    }
+  } else {
+    full_map_pcl_XYZRGB->points = input_pcl->points;
+  }
+  full_map_pcl_XYZRGB->header = input_pcl->header;
+  full_map_pcl_XYZRGB->width = full_map_pcl_XYZRGB->size();
+  full_map_pcl_XYZRGB->height = 1;
+  pcl_conversions::toPCL(ros::Time::now(), full_map_pcl_XYZRGB->header.stamp);
+  //std::cerr << "Stiched point cloud size: " << full_map_pcl->points.size () << std::endl;
+}
+
+void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl){
+  double fit_score = 0.1 * 10;
+  if (full_map_pcl_XYZ->size() > 0){
+    std::cout << "Point cloud input size: " << input_pcl->points.size () << std::endl;
 
     pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
 
@@ -321,42 +365,38 @@ void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in){
     pcl::PointCloud<pcl::PointXYZ>::Ptr aligned_filtered_pcl(new pcl::PointCloud<pcl::PointXYZ>());
     pcl::PCLPointCloud2::Ptr aligned_filtered_pcl2(new pcl::PCLPointCloud2 ());
 
-    icp.setInputSource(cloud_in);
-    icp.setInputTarget(full_map_pcl);
-    icp.setMaxCorrespondenceDistance (resolution);
-    icp.align(*aligned_pcl);
-    std::cerr << "has converged:" << icp.hasConverged() << " score: " << icp.getFitnessScore();
-    //std::cerr << icp.getFinalTransformation() << std::endl;
+    int attempts = 3;
 
-    if (icp.hasConverged() && icp.getFitnessScore() < fit_score){
-      std::cerr << " ...adding to map" << std::endl;
-      pcl::toPCLPointCloud2(*aligned_pcl,*aligned_pcl2);
-      aligned_filtered_pcl2 = filter_to_grid(aligned_pcl2,resolution);
-      pcl::fromPCLPointCloud2(*aligned_filtered_pcl2,*aligned_filtered_pcl);
-
-      //Convert point cloud to ros msg
-      sensor_msgs::PointCloud2 pcl2_msg;
-      pcl::toROSMsg(*aligned_filtered_pcl,pcl2_msg);
-
-      //Publish ROS msg
-      pub_aligned_pcl2.publish(pcl2_msg);
-
-      full_map_pcl->operator +=(*aligned_filtered_pcl);
-      remove_point_cloud_duplicates(full_map_pcl);
-      remove_nan(full_map_pcl);
-    } else {
-      std::cerr << " ...fit score too high" << std::endl;
+    for (int i = 0; i < attempts; i++){
+      fit_score = fit_score / 10;
+      std::cerr << "ICP Attempt: " << i+1 << "/" << attempts << " score maximum: " << fit_score <<  std::endl;
+      icp.setInputSource(input_pcl);
+      icp.setInputTarget(full_map_pcl_XYZ);
+      //icp.setMaxCorrespondenceDistance (resolution);
+      icp.align(*aligned_pcl);
+      std::cerr << "has converged:" << icp.hasConverged() << " score: " << icp.getFitnessScore();
+      std::cerr << icp.getFinalTransformation() << std::endl;
+      if (icp.hasConverged() && icp.getFitnessScore() < fit_score){
+        std::cerr << " ...adding to map" << std::endl;
+        pcl::toPCLPointCloud2(*aligned_pcl,*aligned_pcl2);
+        aligned_filtered_pcl2 = filter_to_grid_XYZRGB(aligned_pcl2,resolution);
+        pcl::fromPCLPointCloud2(*aligned_filtered_pcl2,*aligned_filtered_pcl);
+        full_map_pcl_XYZ->operator +=(*aligned_filtered_pcl);
+        remove_point_cloud_duplicates(full_map_pcl_XYZ);
+        break;
+      } else {
+        std::cerr << " ...fit score too high" << std::endl;
+      }
     }
   } else {
-    full_map_pcl->points = cloud_in->points;
+    full_map_pcl_XYZ->points = input_pcl->points;
   }
-  full_map_pcl->header = cloud_in->header;
-  full_map_pcl->width = full_map_pcl->size();
-  full_map_pcl->height = 1;
-  pcl_conversions::toPCL(ros::Time::now(), full_map_pcl->header.stamp);
+  full_map_pcl_XYZ->header = input_pcl->header;
+  full_map_pcl_XYZ->width = full_map_pcl_XYZ->size();
+  full_map_pcl_XYZ->height = 1;
+  pcl_conversions::toPCL(ros::Time::now(), full_map_pcl_XYZ->header.stamp);
   //std::cerr << "Stiched point cloud size: " << full_map_pcl->points.size () << std::endl;
 }
-*/
 
 void input_cloud_callback (const sensor_msgs::PointCloud2ConstPtr& cloud_in_msg){
     pcl_timestamp = cloud_in_msg->header.stamp;
@@ -384,7 +424,7 @@ void input_cloud_callback (const sensor_msgs::PointCloud2ConstPtr& cloud_in_msg)
       pcl::fromPCLPointCloud2(*filtered_pcl2,*filtered_pcl);
 
       add_pcl_to_map(filtered_pcl);
-      //icp_convergence(input_pcl);
+      //icp_convergence(filtered_pcl);
 
       output_pcl = *full_map_pcl_XYZRGB;
       publish_point_cloud(output_pcl);
@@ -400,7 +440,7 @@ void input_cloud_callback (const sensor_msgs::PointCloud2ConstPtr& cloud_in_msg)
       pcl::fromPCLPointCloud2(*filtered_pcl2,*filtered_pcl);
 
       add_pcl_to_map(filtered_pcl);
-      //icp_convergence(input_pcl);
+      //icp_convergence(filtered_pcl);
 
       output_pcl = *full_map_pcl_XYZ;
       publish_point_cloud(output_pcl);
