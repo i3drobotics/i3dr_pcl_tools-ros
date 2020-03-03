@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!--
+  name:        Mapping Pipeline
+  author:      Marti Morta Garriga
+  date:        8 Aug 2019
+  description: From camera images to octomap map
+  Copyright Wood PLC.
+
+  TODO:  Set Machines
+-->
+
+<launch>
+
+    <arg name="camera_namespace" default="i3dr_stereo"/>
+    <!-- camera model: deimos/phobos_nuclear -->
+    <arg name="camera_model" default="phobos_nuclear"/>
+    <!-- urdf namespace: same as camera namespace -->
+    <arg name="urdf_namespace" default="$(arg camera_namespace)"/>
+    <!-- startup camera within this launcher or it is started elsewhere -->
+    <arg name="camera_en" default="true"/>
+    <arg name="scan_frame_id" default="scan" />
+    <arg name="map_frame_id" default="map" />
+    <arg name="rviz" default="false"/>
+    <arg name="rtabmap" default="true"/>
+    <arg name="res" default="0.01"/>
+    <arg name="use_compressed" default="true"/>
+
+    <arg name="map_to_ur10_base" default="false"/>
+    <arg name="map_to_scan" default="false"/>
+
+    <arg name="manual_map_scan" default="true"/>
+
+    <!-- TODO: Calibration routine from scan to map (using aruco) -->
+    <!-- TODO: Fixed tf from scan to map (remove this when calibration routine is ready) -->
+    <node if="$(arg manual_map_scan)" pkg="tf2_ros" type="static_transform_publisher" name="scan_map_tf" args="0 0 0  0 0 0 $(arg map_frame_id) $(arg scan_frame_id)" />
+
+    <!-- camera control-->
+    <include if="$(arg camera_en)" file="$(find i3dr_rtabmap)/launch/ss_stereo.launch">
+        <arg name="camera_namespace" value="$(arg camera_namespace)" />
+        <arg name="camera_model" value="$(arg camera_model)" />
+        <arg name="urdf_namespace" value="$(arg urdf_namespace)"/>
+        <arg name="dropping" value="false" />
+        <arg name="rviz" value="false" />
+        <arg name="sim" value="false" />
+        <arg name="urdf" value="true" />
+        <arg name="depth_max" value="10"/>
+        <arg name="depth_min" value="0.4"/>
+        <arg name="stereo_algorithm" value="0"/>
+    </include>
+
+    <!-- rviz for debugging -->
+    <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rivz" args="-d $(find i3dr_pcl_tools)/config/test_mapping_$(arg camera_model).rviz"/>
+
+    <node name="pcl_map" pkg="i3dr_pcl_tools" type="pcl_map" output="screen" >
+        <param name="resolution" type="double" value="0.001" />
+        <param name="pcl2_input" type="string" value="/$(arg camera_namespace)/points2" />
+        <param name="pcl2_output" type="string" value="/map_plc2" />
+        <param name="pcl_output" type="string" value="/map_pcl" />
+    </node>
+
+</launch>
