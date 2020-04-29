@@ -1,0 +1,11 @@
+
+<launch>
+
+    <node name="save_pcl" pkg="i3dr_pcl_tools" type="save_pcl" output="screen" >
+        <param name="spin_once" type="bool" value="true" />
+        <param name="pcl2_input" type="string" value="/map_plc2" />
+        <param name="pcl_filepath" type="string" value="/home/i3dr/i3dr_mapping/data/i3dr_wood_scan/points.ply" />
+        <param name="include_tf" type="bool" value="false" />
+    </node>
+
+</launch>
