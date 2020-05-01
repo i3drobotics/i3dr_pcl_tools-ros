@@ -22,14 +22,14 @@ bool spin_once;
 void save_point_cloud (std::string save_filepath, pcl::PointCloud<pcl::PointXYZRGB> pcl_to_save){
 
   ROS_INFO("Saving point cloud... %s", save_filepath.c_str());
-  pcl::io::savePLYFileASCII(save_filepath,pcl_to_save);
+  pcl::io::savePLYFileBinary(save_filepath,pcl_to_save);
   ROS_INFO("Point cloud saved. %s", save_filepath.c_str());
 }
 
 void save_point_cloud (std::string save_filepath, pcl::PointCloud<pcl::PointXYZ> pcl_to_save){
 
   ROS_INFO("Saving point cloud... %s", save_filepath.c_str());
-  pcl::io::savePLYFileASCII(save_filepath,pcl_to_save);
+  pcl::io::savePLYFileBinary(save_filepath,pcl_to_save);
   ROS_INFO("Point cloud saved. %s", save_filepath.c_str());
 }
 
