@@ -87,10 +87,13 @@ void input_cloud_callback (const sensor_msgs::PointCloud2ConstPtr& cloud_in_msg)
       //Read point cloud from ROS msg
       pcl::fromROSMsg(*cloud_in_msg,*input_pcl);
 
-      tf_pcl = transform_pcl_to_world(input_pcl);
-
-      output_pcl = *tf_pcl;
-      publish_point_cloud(output_pcl);
+      try{
+        tf_pcl = transform_pcl_to_world(input_pcl);
+        output_pcl = *tf_pcl;
+        publish_point_cloud(output_pcl);
+      } catch (const tf2::ConnectivityException& e){
+        ROS_ERROR("Frames not part of the same tree");
+      }
     } else {
       pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl(new pcl::PointCloud<pcl::PointXYZ>); //Point cloud from ROS msg
       pcl::PointCloud<pcl::PointXYZ>::Ptr tf_pcl(new pcl::PointCloud<pcl::PointXYZ>);
@@ -98,10 +101,13 @@ void input_cloud_callback (const sensor_msgs::PointCloud2ConstPtr& cloud_in_msg)
       //Read point cloud from ROS msg
       pcl::fromROSMsg(*cloud_in_msg,*input_pcl);
 
-      tf_pcl = transform_pcl_to_world(input_pcl);
-
-      output_pcl = *tf_pcl;
-      publish_point_cloud(output_pcl);
+      try{
+        tf_pcl = transform_pcl_to_world(input_pcl);
+        output_pcl = *tf_pcl;
+        publish_point_cloud(output_pcl);
+      } catch (const tf2::ConnectivityException& e){
+        ROS_ERROR("Frames not part of the same tree");
+      }
     }
 }
 
