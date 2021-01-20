@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(i3dr_pcl_tools)
 
-find_package(catkin REQUIRED cv_bridge image_transport roscpp tf pcl_ros serial std_msgs sensor_msgs)
+find_package(catkin REQUIRED cv_bridge image_transport roscpp tf pcl_ros std_msgs sensor_msgs)
 find_package(PCL 1.2 REQUIRED)
 find_package(OpenCV REQUIRED)
 
