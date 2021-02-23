@@ -15,7 +15,6 @@ std::string output_point_cloud2_node;
 std::string output_point_cloud_node;
 std::string output_frame;
 ros::Publisher pub_world_tf_pcl2;
-ros::Publisher pub_world_tf_pcl;
 tf::TransformListener *tf_listener;
 ros::Time pcl_timestamp;
 
@@ -27,10 +26,7 @@ void publish_point_cloud(pcl::PointCloud<pcl::PointXYZ> input_pcl){
 
   //Publish ROS msg
   pub_world_tf_pcl2.publish(pcl2_msg);
-
-  sensor_msgs::convertPointCloud2ToPointCloud(pcl2_msg,pcl_msg);
-  pub_world_tf_pcl.publish(pcl_msg);
-    //std::cerr << "Published point cloud." << std::endl;
+  //std::cerr << "Published point cloud." << std::endl;
 }
 
 void publish_point_cloud(pcl::PointCloud<pcl::PointXYZRGB> input_pcl){
@@ -41,10 +37,7 @@ void publish_point_cloud(pcl::PointCloud<pcl::PointXYZRGB> input_pcl){
 
   //Publish ROS msg
   pub_world_tf_pcl2.publish(pcl2_msg);
-
-  sensor_msgs::convertPointCloud2ToPointCloud(pcl2_msg,pcl_msg);
-  pub_world_tf_pcl.publish(pcl_msg);
-    //std::cerr << "Published point cloud." << std::endl;
+  //std::cerr << "Published point cloud." << std::endl;
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr transform_pcl_to_world(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl){
@@ -118,14 +111,12 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   ros::NodeHandle p_nh("~");
 
-  p_nh.getParam("pcl2_input",input_point_cloud2_node);
-  p_nh.getParam("pcl2_output",output_point_cloud2_node);
-  p_nh.getParam("pcl_output",output_point_cloud_node);
+  p_nh.getParam("cloud_input",input_point_cloud2_node);
+  p_nh.getParam("cloud_output",output_point_cloud2_node);
   p_nh.getParam("tf",output_frame);
 
   ros::Subscriber sub = nh.subscribe (input_point_cloud2_node, 1, input_cloud_callback);
   pub_world_tf_pcl2 = nh.advertise<sensor_msgs::PointCloud2>(output_point_cloud2_node, 1);
-  pub_world_tf_pcl = nh.advertise<sensor_msgs::PointCloud>(output_point_cloud_node, 1);
 
   tf_listener = new tf::TransformListener();
 

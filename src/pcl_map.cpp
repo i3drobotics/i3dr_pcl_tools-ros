@@ -10,40 +10,31 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/registration/icp.h>
+#include <pcl/filters/voxel_grid.h>
+#include <i3dr_pcl_tools/pause_map.h>
+#include <i3dr_pcl_tools/resume_map.h>
 #include <i3dr_pcl_tools/reset_map.h>
 #include <i3dr_pcl_tools/save_map.h>
+#include <i3dr_pcl_tools/single_step_map.h>
+#include <i3dr_pcl_tools/set_map_resolution.h>
 #include <math.h>
+#include <mutex>
 
 std::string input_point_cloud2_node;
 std::string output_point_cloud2_node;
 std::string output_point_cloud_node;
 ros::Publisher pub_full_map_pcl2;
-ros::Publisher pub_full_map_pcl;
 ros::Publisher pub_aligned_pcl2;
 ros::Time pcl_timestamp;
 pcl::PointCloud<pcl::PointXYZ>::Ptr full_map_pcl_XYZ;
 pcl::PointCloud<pcl::PointXYZRGB>::Ptr full_map_pcl_XYZRGB;
-double resolution;
-
-bool reset_map(i3dr_pcl_tools::reset_map::Request &req,
-               i3dr_pcl_tools::reset_map::Response &res)
-{
-  ROS_INFO("Reset Global Map");
-  full_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
-  full_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-  return true;
-}
-
-bool save_map(i3dr_pcl_tools::save_map::Request &req,
-              i3dr_pcl_tools::save_map::Response &res)
-{
-  //save point cloud to file
-  ROS_INFO("saving point cloud to file: '%s'", req.filepath.c_str());
-  pcl::io::savePLYFileBinary(req.filepath, *full_map_pcl_XYZRGB);
-  res.res = "Point cloud saved to file: " + req.filepath;
-  ROS_INFO("%s", res.res.c_str());
-  return true;
-}
+pcl::PointCloud<pcl::PointXYZ>::Ptr orig_map_pcl_XYZ;
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr orig_map_pcl_XYZRGB;
+double visual_resolution,stored_resolution;
+bool pause_mapping;
+bool single_step;
+std::mutex pause_mutex;
+std::mutex resolution_mutex;
 
 bool comparePoint_XYZ(pcl::PointXYZ p1, pcl::PointXYZ p2)
 {
@@ -191,6 +182,36 @@ void remove_point_cloud_duplicates(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_
   input_pcl->width = input_pcl->size();
 }
 
+pcl::PCLPointCloud2::Ptr filter_voxel_grid_XYZ(pcl::PCLPointCloud2::Ptr input_pcl2, float resolution)
+{;
+  pcl::PCLPointCloud2::Ptr filtered_pcl2(new pcl::PCLPointCloud2());
+
+  // Create the filtering object
+  pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+  sor.setInputCloud (input_pcl2);
+  sor.setLeafSize (resolution, resolution, resolution);
+  sor.filter (*filtered_pcl2);
+
+  filtered_pcl2->header = input_pcl2->header;
+
+  return (filtered_pcl2);
+}
+
+pcl::PCLPointCloud2::Ptr filter_voxel_grid_XYZRGB(pcl::PCLPointCloud2::Ptr input_pcl2, float resolution)
+{
+  pcl::PCLPointCloud2::Ptr filtered_pcl2(new pcl::PCLPointCloud2());
+
+  // Create the filtering object
+  pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+  sor.setInputCloud (input_pcl2);
+  sor.setLeafSize (resolution, resolution, resolution);
+  sor.filter (*filtered_pcl2);
+
+  filtered_pcl2->header = input_pcl2->header;
+
+  return (filtered_pcl2);
+}
+
 pcl::PCLPointCloud2::Ptr filter_to_grid_XYZ(pcl::PCLPointCloud2::Ptr input_pcl2, float resolution)
 {
   pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl(new pcl::PointCloud<pcl::PointXYZ>());
@@ -273,79 +294,135 @@ pcl::PCLPointCloud2::Ptr filter_to_grid_XYZRGB(pcl::PCLPointCloud2::Ptr input_pc
   return (filtered_pcl2);
 }
 
+bool pause_map(i3dr_pcl_tools::pause_map::Request &req,
+               i3dr_pcl_tools::pause_map::Response &res)
+{
+  ROS_INFO("Map paused");
+  pause_mutex.lock();
+  pause_mapping = true;
+  pause_mutex.unlock();
+  return true;
+}
+
+bool resume_map(i3dr_pcl_tools::resume_map::Request &req,
+               i3dr_pcl_tools::resume_map::Response &res)
+{
+  ROS_INFO("Map resumed");
+  pause_mutex.lock();
+  pause_mapping = false;
+  pause_mutex.unlock();
+  return true;
+}
+
+bool single_step_map(i3dr_pcl_tools::single_step_map::Request &req,
+               i3dr_pcl_tools::single_step_map::Response &res)
+{
+  ROS_INFO("Map single step");
+  pause_mutex.lock();
+  single_step = true;
+  pause_mutex.unlock();
+  return true;
+}
+
+bool reset_map(i3dr_pcl_tools::reset_map::Request &req,
+               i3dr_pcl_tools::reset_map::Response &res)
+{
+  ROS_INFO("Reset Global Map");
+  full_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  full_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+  orig_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  orig_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+  return true;
+}
+
+bool save_map(i3dr_pcl_tools::save_map::Request &req,
+              i3dr_pcl_tools::save_map::Response &res)
+{
+  //pcl::PCLPointCloud2::Ptr filtered_pcl2(new pcl::PCLPointCloud2());
+  //pcl::PCLPointCloud2::Ptr input_pcl2(new pcl::PCLPointCloud2());
+  //pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_pcl(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+  //ROS_INFO("Filtering points to resolution...");
+  //pcl::toPCLPointCloud2(*orig_map_pcl_XYZRGB, *input_pcl2);
+  //filtered_pcl2 = filter_voxel_grid_XYZRGB(input_pcl2, req.resolution);
+  //pcl::fromPCLPointCloud2(*filtered_pcl2, *filtered_pcl);
+  //save point cloud to file
+  ROS_INFO("saving point cloud to file: '%s'", req.filepath.c_str());
+  pcl::io::savePLYFileBinary(req.filepath, *orig_map_pcl_XYZRGB);
+  res.res = "Point cloud saved to file: " + req.filepath;
+  ROS_INFO("%s", res.res.c_str());
+  return true;
+}
+
+bool set_map_resolution(i3dr_pcl_tools::set_map_resolution::Request &req,
+              i3dr_pcl_tools::set_map_resolution::Response &res)
+{
+  resolution_mutex.lock();
+  visual_resolution = req.visual;
+  stored_resolution = req.stored;
+  resolution_mutex.unlock();
+  res.res = "Map resolution adjusted";
+  return true;
+}
+
 void publish_point_cloud(pcl::PointCloud<pcl::PointXYZ> input_pcl)
 {
   sensor_msgs::PointCloud2 pcl2_msg;
-  sensor_msgs::PointCloud pcl_msg;
   //Convert point cloud to ros msg
   pcl::toROSMsg(input_pcl, pcl2_msg);
 
   //Publish ROS msg
   pub_full_map_pcl2.publish(pcl2_msg);
-
-  sensor_msgs::convertPointCloud2ToPointCloud(pcl2_msg, pcl_msg);
-  pub_full_map_pcl.publish(pcl_msg);
-  std::cerr << "Published point cloud." << std::endl;
+  //std::cerr << "Published point cloud." << std::endl;
 }
 
 void publish_point_cloud(pcl::PointCloud<pcl::PointXYZRGB> input_pcl)
 {
   sensor_msgs::PointCloud2 pcl2_msg;
-  sensor_msgs::PointCloud pcl_msg;
   //Convert point cloud to ros msg
   pcl::toROSMsg(input_pcl, pcl2_msg);
 
   //Publish ROS msg
   pub_full_map_pcl2.publish(pcl2_msg);
-
-  sensor_msgs::convertPointCloud2ToPointCloud(pcl2_msg, pcl_msg);
-  pub_full_map_pcl.publish(pcl_msg);
-  std::cerr << "Published rgb point cloud map." << std::endl;
+  //std::cerr << "Published rgb point cloud map." << std::endl;
 }
 
-void add_pcl_to_map(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl)
+void add_pcl_to_map(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl, pcl::PointCloud<pcl::PointXYZ>::Ptr map_pcl, bool remove_duplicates)
 {
-
   pcl::PCLPointCloud2::Ptr full_map_pcl2(new pcl::PCLPointCloud2());
   pcl::PointCloud<pcl::PointXYZ>::Ptr full_map_filtered_pcl(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::PCLPointCloud2::Ptr full_map_filtered_pcl2(new pcl::PCLPointCloud2());
 
-  full_map_pcl_XYZ->operator+=(*input_pcl);
+  map_pcl->operator+=(*input_pcl);
 
-  remove_point_cloud_duplicates(full_map_pcl_XYZ);
-  //pcl::toPCLPointCloud2(*full_map_pcl,*full_map_pcl2);
-  //full_map_filtered_pcl2 = filter_to_grid(full_map_pcl2,resolution);
-  //pcl::fromPCLPointCloud2(*full_map_filtered_pcl2,*full_map_filtered_pcl);
+  if (remove_duplicates){
+    remove_point_cloud_duplicates(map_pcl);
+  }
 
-  full_map_pcl_XYZ->header = input_pcl->header;
-  full_map_pcl_XYZ->width = full_map_pcl_XYZ->size();
-  full_map_pcl_XYZ->height = 1;
-  //full_map_pcl = full_map_filtered_pcl;
-  std::cerr << "Glued point cloud size: " << full_map_pcl_XYZ->points.size() << std::endl;
+  map_pcl->header = input_pcl->header;
+  map_pcl->width = map_pcl->size();
+  map_pcl->height = 1;
 }
 
-void add_pcl_to_map(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl)
+void add_pcl_to_map(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl, pcl::PointCloud<pcl::PointXYZRGB>::Ptr map_pcl, bool remove_duplicates)
 {
 
   pcl::PCLPointCloud2::Ptr full_map_pcl2(new pcl::PCLPointCloud2());
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr full_map_filtered_pcl(new pcl::PointCloud<pcl::PointXYZRGB>());
   pcl::PCLPointCloud2::Ptr full_map_filtered_pcl2(new pcl::PCLPointCloud2());
 
-  full_map_pcl_XYZRGB->operator+=(*input_pcl);
+  map_pcl->operator+=(*input_pcl);
 
-  remove_point_cloud_duplicates(full_map_pcl_XYZRGB);
-  //pcl::toPCLPointCloud2(*full_map_pcl,*full_map_pcl2);
-  //full_map_filtered_pcl2 = filter_to_grid(full_map_pcl2,resolution);
-  //pcl::fromPCLPointCloud2(*full_map_filtered_pcl2,*full_map_filtered_pcl);
-
-  full_map_pcl_XYZRGB->header = input_pcl->header;
-  full_map_pcl_XYZRGB->width = full_map_pcl_XYZRGB->size();
-  full_map_pcl_XYZRGB->height = 1;
-  //full_map_pcl = full_map_filtered_pcl;
-  std::cerr << "Glued point cloud size: " << full_map_pcl_XYZRGB->points.size() << std::endl;
+  if (remove_duplicates){
+    remove_point_cloud_duplicates(map_pcl);
+  }
+  
+  map_pcl->header = input_pcl->header;
+  map_pcl->width = map_pcl->size();
+  map_pcl->height = 1;
 }
 
-void icp_convergence(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl)
+void icp_convergence(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl, double resolution)
 {
   double fit_score = 0.1 * 10;
   if (full_map_pcl_XYZRGB->size() > 0)
@@ -398,7 +475,7 @@ void icp_convergence(pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl)
   //std::cerr << "Stiched point cloud size: " << full_map_pcl->points.size () << std::endl;
 }
 
-void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl)
+void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl, double resolution)
 {
   double fit_score = 0.1 * 10;
   if (full_map_pcl_XYZ->size() > 0)
@@ -453,58 +530,42 @@ void icp_convergence(pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl)
 
 void input_cloud_callback(const sensor_msgs::PointCloud2ConstPtr &cloud_in_msg)
 {
-  pcl_timestamp = cloud_in_msg->header.stamp;
+  pause_mutex.lock();
+  if (!pause_mapping || single_step){
+    single_step = false;
+    pause_mutex.unlock();
+    pcl_timestamp = cloud_in_msg->header.stamp;
 
-  bool isRGB = false;
-  for (int i = 0; i < cloud_in_msg->fields.size(); i++)
-  {
-    if (cloud_in_msg->fields[i].name == "rgb")
-    {
-      isRGB = true;
-      break;
-    }
-  }
-  pcl::PCLPointCloud2::Ptr filtered_pcl2(new pcl::PCLPointCloud2());
-  pcl::PCLPointCloud2::Ptr input_pcl2(new pcl::PCLPointCloud2()); //Converted point cloud
-  pcl::PCLPointCloud2::Ptr output_pcl2(new pcl::PCLPointCloud2());
+    pcl::PCLPointCloud2::Ptr filtered_pcl2(new pcl::PCLPointCloud2());
+    pcl::PCLPointCloud2::Ptr filtered2_pcl2(new pcl::PCLPointCloud2());
+    pcl::PCLPointCloud2::Ptr input_pcl2(new pcl::PCLPointCloud2()); //Converted point cloud
 
-  if (isRGB)
-  {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pcl(new pcl::PointCloud<pcl::PointXYZRGB>);    //Point cloud from ROS msg
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_pcl(new pcl::PointCloud<pcl::PointXYZRGB>); //Point cloud from ROS msg
-    pcl::PointCloud<pcl::PointXYZRGB> output_pcl;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered2_pcl(new pcl::PointCloud<pcl::PointXYZRGB>); //Point cloud from ROS msg
     //Read point cloud from ROS msg
     pcl::fromROSMsg(*cloud_in_msg, *input_pcl);
 
     pcl::toPCLPointCloud2(*input_pcl, *input_pcl2);
 
-    filtered_pcl2 = filter_to_grid_XYZRGB(input_pcl2, resolution);
+    resolution_mutex.lock();
+    double vis_res = visual_resolution;
+    double stor_res = stored_resolution;
+    resolution_mutex.unlock();
+    filtered_pcl2 = filter_voxel_grid_XYZRGB(input_pcl2, vis_res);
+    filtered2_pcl2 = filter_voxel_grid_XYZRGB(input_pcl2, stor_res);
     pcl::fromPCLPointCloud2(*filtered_pcl2, *filtered_pcl);
+    pcl::fromPCLPointCloud2(*filtered2_pcl2, *filtered2_pcl);
 
-    add_pcl_to_map(filtered_pcl);
-    //icp_convergence(filtered_pcl);
+    add_pcl_to_map(filtered_pcl,full_map_pcl_XYZRGB,true);
+    add_pcl_to_map(filtered2_pcl,orig_map_pcl_XYZRGB,false);
 
-    output_pcl = *full_map_pcl_XYZRGB;
-    publish_point_cloud(output_pcl);
+    std::cerr << "Mozaic point cloud size: " << orig_map_pcl_XYZRGB->points.size() << std::endl;
+    //std::cerr << "Mozaic reduced point cloud size: " << full_map_pcl_XYZRGB->points.size() << std::endl;
+  } else {
+    pause_mutex.unlock();
   }
-  else
-  {
-    pcl::PointCloud<pcl::PointXYZ>::Ptr input_pcl(new pcl::PointCloud<pcl::PointXYZ>);    //Point cloud from ROS msg
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_pcl(new pcl::PointCloud<pcl::PointXYZ>); //Point cloud from ROS msg
-    pcl::PointCloud<pcl::PointXYZ> output_pcl;
-    //Read point cloud from ROS msg
-    pcl::fromROSMsg(*cloud_in_msg, *input_pcl);
-    pcl::toPCLPointCloud2(*input_pcl, *input_pcl2);
-
-    filtered_pcl2 = filter_to_grid_XYZRGB(input_pcl2, resolution);
-    pcl::fromPCLPointCloud2(*filtered_pcl2, *filtered_pcl);
-
-    add_pcl_to_map(filtered_pcl);
-    //icp_convergence(filtered_pcl);
-
-    output_pcl = *full_map_pcl_XYZ;
-    publish_point_cloud(output_pcl);
-  }
+  publish_point_cloud(*full_map_pcl_XYZRGB);
 }
 
 int main(int argc, char **argv)
@@ -515,18 +576,24 @@ int main(int argc, char **argv)
 
   full_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
   full_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+  orig_map_pcl_XYZ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  orig_map_pcl_XYZRGB = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-  p_nh.getParam("resolution", resolution);
-  p_nh.getParam("pcl2_input", input_point_cloud2_node);
-  p_nh.getParam("pcl2_output", output_point_cloud2_node);
-  p_nh.getParam("pcl_output", output_point_cloud_node);
+  p_nh.getParam("visual_resolution", visual_resolution);
+  p_nh.getParam("stored_resolution", stored_resolution);
+  p_nh.getParam("cloud_input", input_point_cloud2_node);
+  p_nh.getParam("cloud_output", output_point_cloud2_node);
+  p_nh.getParam("pause_on_start", pause_mapping);
 
   ros::Subscriber sub = nh.subscribe(input_point_cloud2_node, 1, input_cloud_callback);
   pub_full_map_pcl2 = nh.advertise<sensor_msgs::PointCloud2>(output_point_cloud2_node, 1);
-  pub_full_map_pcl = nh.advertise<sensor_msgs::PointCloud>(output_point_cloud_node, 1);
 
   ros::ServiceServer service_reset = nh.advertiseService("reset_map", reset_map);
   ros::ServiceServer service_save = nh.advertiseService("save_map", save_map);
+  ros::ServiceServer service_resume = nh.advertiseService("resume_map", resume_map);
+  ros::ServiceServer service_pause = nh.advertiseService("pause_map", pause_map);
+  ros::ServiceServer service_single_step = nh.advertiseService("single_step_map", single_step_map);
+  ros::ServiceServer service_resolution = nh.advertiseService("set_map_resolution", set_map_resolution);
 
   ros::spin();
 }

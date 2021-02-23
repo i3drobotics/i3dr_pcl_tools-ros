@@ -1,14 +1,21 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(i3dr_pcl_tools)
 
-find_package(catkin REQUIRED cv_bridge image_transport roscpp tf pcl_ros std_msgs sensor_msgs)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(catkin REQUIRED cv_bridge image_transport roscpp tf pcl_ros std_msgs sensor_msgs message_generation)
 find_package(PCL 1.2 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 add_service_files(
     FILES
+    single_step_map.srv
+    pause_map.srv
+    resume_map.srv
     reset_map.srv
     save_map.srv
+    set_map_resolution.srv
 )
  
 generate_messages(

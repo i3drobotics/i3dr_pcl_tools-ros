@@ -63,14 +63,14 @@ bool equalPoint_XYZRGB(pcl::PointXYZRGB p1, pcl::PointXYZRGB p2){
 }
 
 bool nanPoint_XYZ(pcl::PointXYZ p){
-  if (isnan(p.x)){
+  if (std::isnan(p.x)){
     return true;
   }
   return false;
 }
 
 bool nanPoint_XYZRGB(pcl::PointXYZRGB p){
-  if (isnan(p.x)){
+  if (std::isnan(p.x)){
     return true;
   }
   return false;
